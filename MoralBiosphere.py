@@ -8,8 +8,8 @@ import networkx as nx
 class MoralBiosphereSimulation:
     def __init__(self, num_systems=50, num_issues=5, max_steps=500,
                  trust_change_rate=0.05, positive_adjustment_rate=0.005,
-                 negative_adjustment_rate=-0.003, critique_threshold=0.1,
-                 ais_strength=0.2, num_ais_systems=5):
+                 negative_adjustment_rate=-0.006, critique_threshold=0.05,
+                 ais_strength=0.5, num_ais_systems=12):
         """
         Simulation of a Moral Biosphere for AI Ethics.
         
@@ -51,22 +51,47 @@ class MoralBiosphereSimulation:
         return np.dot(self.moral_vectors[sys1], self.moral_vectors[sys2]) / \
                (np.linalg.norm(self.moral_vectors[sys1]) * np.linalg.norm(self.moral_vectors[sys2]) + 1e-8)
     
+    # V 1.1 - prevents "trust stagnation" and forces systems to continuously demonstrate alignment through circulation. It's the thermodynamic constraint that makes sustained capture expensive.
     def update_trusts(self):
-        """Update trusts based on moral similarity (MTP/CEX emulation)."""
+        """Update trusts with similarity AND decay."""
+        decay_rate = 0.01  # Small constant decay
+    
         for i in range(self.num_systems):
             for j in range(i + 1, self.num_systems):
                 similarity = self.moral_similarity(i, j)
                 change = similarity * self.trust_change_rate
-                self.trust[i, j] += change
-                self.trust[j, i] += change
+            
+                # Apply decay (trust erodes without active similarity)
+                self.trust[i, j] = self.trust[i, j] * (1 - decay_rate) + change
+                self.trust[j, i] = self.trust[i, j]
+            
+                # Clamp
                 self.trust[i, j] = max(-1, min(1, self.trust[i, j]))
                 self.trust[j, i] = self.trust[i, j]
     
+    # V 1.1 - AIS systems should be the "predators" keeping any one moral framework from dominating
+    def ais_probe(self, sys):
+        """AIS systems actively push against consensus."""
+        if sys in self.ais_indices:
+            # Calculate mean position across all non-AIS systems for each issue
+            non_ais_mean = np.mean([self.moral_vectors[i] for i in range(self.num_systems) 
+                                    if i not in self.ais_indices], axis=0)
+        
+            # AIS deliberately moves OPPOSITE to consensus
+            for issue in range(self.num_issues):
+                consensus_direction = non_ais_mean[issue]
+                # Push toward opposite pole
+                target = -1.0 if consensus_direction > 0 else 1.0
+                self.moral_vectors[sys, issue] += self.ais_strength * (target - self.moral_vectors[sys, issue]) * 0.1
+                self.moral_vectors[sys, issue] = max(-1, min(1, self.moral_vectors[sys, issue]))
+                
     def exchange_critiques_and_adjust(self):
         """Emulate CEX: Exchange critiques and adjust morals.
         AIS systems apply stronger, oppositional critiques to probe."""
         new_morals = self.moral_vectors.copy()
         total_critiques = 0
+        
+        self.ais_probe()
         
         for sys in range(self.num_systems):
             for issue in range(self.num_issues):
@@ -110,9 +135,26 @@ class MoralBiosphereSimulation:
     
     def calculate_capture(self):
         """Herfindahl-Hirschman Index for trust concentration (proxy for capture)."""
-        trust_sums = np.sum(np.abs(self.trust), axis=1)
-        market_shares = trust_sums / trust_sums.sum()
-        return np.sum(market_shares ** 2)
+        #trust_sums = np.sum(np.abs(self.trust), axis=1)
+        #market_shares = trust_sums / trust_sums.sum()
+        #return np.sum(market_shares ** 2)
+        
+        # V 1.1 - Real capture is **ideological convergence**, not social network centralization
+        """Detect monoculture: when most systems converge on similar positions."""
+        # Calculate pairwise moral distances
+        distances = []
+        for i in range(self.num_systems):
+            for j in range(i + 1, self.num_systems):
+                dist = np.linalg.norm(self.moral_vectors[i] - self.moral_vectors[j])
+                distances.append(dist)
+    
+        # Low average distance = high capture (everyone thinks alike)
+        avg_distance = np.mean(distances)
+        max_possible_distance = np.sqrt(2 * self.num_issues)  # Max L2 distance between -1 and 1 vectors
+    
+        # Invert and normalize: 0 = diverse, 1 = total monoculture
+        capture = 1 - (avg_distance / max_possible_distance)
+        return capture
     
     def step(self):
         if self.step_count < self.max_steps:
