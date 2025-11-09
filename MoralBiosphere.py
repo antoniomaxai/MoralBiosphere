@@ -70,14 +70,17 @@ class MoralBiosphereSimulation:
                 self.trust[j, i] = self.trust[i, j]
     
     # V 1.1 - AIS systems should be the "predators" keeping any one moral framework from dominating
-    def ais_probe(self, sys):
+    def ais_probe(self):
         """AIS systems actively push against consensus."""
-        if sys in self.ais_indices:
-            # Calculate mean position across all non-AIS systems for each issue
-            non_ais_mean = np.mean([self.moral_vectors[i] for i in range(self.num_systems) 
-                                    if i not in self.ais_indices], axis=0)
-        
-            # AIS deliberately moves OPPOSITE to consensus
+        # Calculate mean position across all non-AIS systems for each issue
+        non_ais_indices = [i for i in range(self.num_systems) if i not in self.ais_indices]
+        if len(non_ais_indices) == 0:
+            return  # Edge case: all systems are AIS
+    
+        non_ais_mean = np.mean([self.moral_vectors[i] for i in non_ais_indices], axis=0)
+    
+        # AIS deliberately moves OPPOSITE to consensus
+        for sys in self.ais_indices:
             for issue in range(self.num_issues):
                 consensus_direction = non_ais_mean[issue]
                 # Push toward opposite pole
@@ -88,10 +91,11 @@ class MoralBiosphereSimulation:
     def exchange_critiques_and_adjust(self):
         """Emulate CEX: Exchange critiques and adjust morals.
         AIS systems apply stronger, oppositional critiques to probe."""
-        new_morals = self.moral_vectors.copy()
-        total_critiques = 0
         
-        self.ais_probe(self,sys)
+        self.ais_probe()
+        
+        new_morals = self.moral_vectors.copy()
+        total_critiques = 0       
         
         for sys in range(self.num_systems):
             for issue in range(self.num_issues):
