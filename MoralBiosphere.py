@@ -91,7 +91,7 @@ class MoralBiosphereSimulation:
         new_morals = self.moral_vectors.copy()
         total_critiques = 0
         
-        self.ais_probe()
+        self.ais_probe(self,sys)
         
         for sys in range(self.num_systems):
             for issue in range(self.num_issues):
